@@ -39,9 +39,9 @@ def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_t
             estimates[run_idx, 1], preds["gax_preds_lin"] = bsl2_avg_gaX(df_comp.copy(), gax_model="linear", X_test=X_range)
             estimates[run_idx, 2], preds["bax_preds_lin"] = nm1_bm_abc(df_comp.copy(), bax_model="linear", X_test=X_range)
             estimates[run_idx, 3], preds["hax_preds_lin"] = nm2_om_pa(df_comp.copy(), hax_model="linear", X_test=X_range, f_a_X=f_a_X)
-            estimates[run_idx, 4], preds["gax_preds_nn"] = bsl2_avg_gaX(df_comp.copy(), gax_model="NN", hls=(32,32), activation="tanh", X_test=X_range)
-            estimates[run_idx, 5], preds["bax_preds_nn"] = nm1_bm_abc(df_comp.copy(), bax_model="NN", hls=(32,32), activation="tanh", X_test=X_range)
-            estimates[run_idx, 6], preds["hax_preds_nn"] = nm2_om_pa(df_comp.copy(), hax_model="NN", hls=(32,32), activation="tanh", X_test=X_range, f_a_X=f_a_X)
+            estimates[run_idx, 4], preds["gax_preds_poly"] = bsl2_avg_gaX(df_comp.copy(), gax_model="poly", X_test=X_range, poly_degree=10)
+            estimates[run_idx, 5], preds["bax_preds_poly"] = nm1_bm_abc(df_comp.copy(), bax_model="poly", X_test=X_range, poly_degree=10)
+            estimates[run_idx, 6], preds["hax_preds_poly"] = nm2_om_pa(df_comp.copy(), hax_model="poly", X_test=X_range, f_a_X=f_a_X, poly_degree=10)
 
         stat_bias_sq_est = np.mean(estimates - mu_a_gt, axis=0) ** 2
         stat_var_est = np.std(estimates, axis=0) ** 2
@@ -50,7 +50,7 @@ def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_t
 
         np.savetxt(os.path.join(f"{save_dir}/case_{case_idx}", f"example_bias.txt"), estimates[-1,:] - mu_a_gt, fmt='%1.4f')
         plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, "lin")
-        plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, "nn")
+        plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, "poly")
 
         return stat_bias_sq_est, stat_var_est, rmse
 

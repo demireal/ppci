@@ -2,6 +2,8 @@ import numpy as np
 from scipy import interpolate
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+
 
 def sigmoid(x, beta):
     return 1 / (1 + np.exp(- x @ beta))
@@ -45,7 +47,7 @@ def fit_obs_outcome_fn(df_obs, regressors="X", target="Y", model="NN", hls=(128,
     return model
 
 
-def fit_trial_outcome_fn(df_comp, regressors=["X", "fa(X)"], target="Y", model="linear", hls=(128,32,8), activation="tanh"):
+def fit_trial_outcome_fn(df_comp, regressors=["X", "fa(X)"], target="Y", model="linear", hls=(128,32,8), activation="tanh", poly_degree=10):
     df = df_comp.query("S==1 & A==1").copy()
     X = np.array(df[regressors]).reshape(-1,len(regressors))
     y = np.array(df[target])
@@ -56,13 +58,21 @@ def fit_trial_outcome_fn(df_comp, regressors=["X", "fa(X)"], target="Y", model="
     elif model== "linear":
         model = LinearRegression(fit_intercept=True)
         model.fit(X, y)
+    elif model== "poly":
+        poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
+        if len(regressors) > 1:
+            X_poly = np.hstack((poly.fit_transform(X[:,0].reshape(-1,1)), X[:,1].reshape(-1,1)))
+        else:
+            X_poly = poly.fit_transform(X)
+        model = LinearRegression(fit_intercept=True)
+        model.fit(X_poly, y)
     else:
         raise NotImplementedError(f'{model} to fit h^a(tilde_X) is not implemented')
 
     return model
 
 
-def fit_trial_bias_fn(df_comp, regressors="X", target="Z", model="linear", hls=(128,32,8), activation="tanh"):
+def fit_trial_bias_fn(df_comp, regressors="X", target="Z", model="linear", hls=(128,32,8), activation="tanh", poly_degree=10):
     df = df_comp.query("S==1 & A==1").copy()
     X = np.array(df[regressors]).reshape(-1,len(regressors))
     z = np.array(df[target])
@@ -73,6 +83,11 @@ def fit_trial_bias_fn(df_comp, regressors="X", target="Z", model="linear", hls=(
     elif model== "linear":
         model = LinearRegression(fit_intercept=True)
         model.fit(X, z)
+    elif model== "poly":
+        poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
+        X_poly = poly.fit_transform(X)
+        model = LinearRegression(fit_intercept=True)
+        model.fit(X_poly, z)
     else:
         raise NotImplementedError(f'{model} to fit b^a(X) is not implemented')
 
