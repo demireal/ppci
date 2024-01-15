@@ -14,8 +14,9 @@ def rbf_linear_kernel(X1, X2, length_scales=np.array([0.1,0.1]), alpha=np.array(
     return rbf_term + linear_term
 
 
-def sample_outcome_model_gp(param, X, U):
+def sample_outcome_model_gp(param, X, U, seed):
 
+    np.random.seed(seed)
     XX, UU = np.meshgrid(X, U)
     XU_flat = np.c_[XX.ravel(), UU.ravel()]
 
@@ -33,7 +34,7 @@ def sample_outcome_model_gp(param, X, U):
 def fit_obs_outcome_fn(df_obs, regressors="X", target="Y", model="NN", hls=(128,32,8), activation="tanh"):
     df = df_obs.query("A==1").copy()
     X = np.array(df[regressors]).reshape(-1,len(regressors))
-    y = np.array(df[target]).reshape(-1,1)
+    y = np.array(df[target])
 
     if model == "NN":
         model = MLPRegressor(hidden_layer_sizes=hls, activation=activation, early_stopping=True, validation_fraction=0.2)
@@ -47,7 +48,7 @@ def fit_obs_outcome_fn(df_obs, regressors="X", target="Y", model="NN", hls=(128,
 def fit_trial_outcome_fn(df_comp, regressors=["X", "fa(X)"], target="Y", model="linear", hls=(128,32,8), activation="tanh"):
     df = df_comp.query("S==1 & A==1").copy()
     X = np.array(df[regressors]).reshape(-1,len(regressors))
-    y = np.array(df[target]).reshape(-1,1)
+    y = np.array(df[target])
 
     if model == "NN":
         model = MLPRegressor(hidden_layer_sizes=hls, activation=activation, early_stopping=True, validation_fraction=0.1)
@@ -64,7 +65,7 @@ def fit_trial_outcome_fn(df_comp, regressors=["X", "fa(X)"], target="Y", model="
 def fit_trial_bias_fn(df_comp, regressors="X", target="Z", model="linear", hls=(128,32,8), activation="tanh"):
     df = df_comp.query("S==1 & A==1").copy()
     X = np.array(df[regressors]).reshape(-1,len(regressors))
-    z = np.array(df[target]).reshape(-1,1)
+    z = np.array(df[target])
 
     if model == "NN":
         model = MLPRegressor(hidden_layer_sizes=hls, activation=activation, early_stopping=True, validation_fraction=0.1)

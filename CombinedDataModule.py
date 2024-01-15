@@ -23,8 +23,7 @@ class CombinedDataModule:
                 w_trt=None,
                 ):
 
-        np.random.seed(seed)
-
+        self.seed = seed
         self.d = d  # covariates dimensionality (integer)
         self.n_rct = n_rct
         self.n_tar = n_tar
@@ -43,6 +42,7 @@ class CombinedDataModule:
         self.w_sel = w_sel  # GP for the selection score model P(S=1 | X)
         self.w_trt = w_trt  # GP for the propensity score in OBS study P(A=1 | X, S=2)
 
+        np.random.seed(self.seed)
         self.df  = self._generate_data()
         self.df_obs = self._generate_data_obs()
 
@@ -104,8 +104,8 @@ class CombinedDataModule:
     
 
     def get_true_mean(self, print_res=False):  
+        np.random.seed(self.seed + 1)
         df = pd.DataFrame(index=np.arange(self.n_MC))
-
         df[self.covs] = 2 * np.random.rand(self.n_MC, self.d) - 1  # Uniform[-1,1]
 
         df["P(S=1|X)"] = df.apply(lambda row: expit(self.w_sel(row["X"], row["U"])[0]), axis=1)
