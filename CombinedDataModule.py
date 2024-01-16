@@ -184,6 +184,7 @@ class CombinedDataModule:
         os.makedirs(save_dir, exist_ok=True)
         img_path = os.path.join(save_dir, "true_dgp.jpg")
         plt.savefig(img_path, bbox_inches='tight')
+        plt.close()
 
         return avg_val_x, psx_avg
 

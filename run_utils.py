@@ -9,8 +9,10 @@ import matplotlib
 
 
 def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_trt_par, 
-                 d, big_n_rct, n_tar, n_obs, n_MC, num_est, num_runs_per_case, X_range, U_range, methods):
+                 d, big_n_rct, n_tar, n_obs, n_MC, num_runs_per_case, X_range, U_range, poly_degrees):
 
+        num_pol = len(poly_degrees)
+        num_est = 3 * num_pol + 1
         estimates = np.zeros((num_runs_per_case, num_est))
         preds = {}
 
@@ -36,12 +38,10 @@ def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_t
             df_comp = df_comp_big.loc[comp_idx, :].copy().reset_index(drop=True)
 
             estimates[run_idx, 0] = bsl1_avg_faX(df_comp.copy())
-            estimates[run_idx, 1], preds["gax_preds_lin"] = bsl2_avg_gaX(df_comp.copy(), gax_model="linear", X_test=X_range)
-            estimates[run_idx, 2], preds["bax_preds_lin"] = nm1_bm_abc(df_comp.copy(), bax_model="linear", X_test=X_range)
-            estimates[run_idx, 3], preds["hax_preds_lin"] = nm2_om_pa(df_comp.copy(), hax_model="linear", X_test=X_range, f_a_X=f_a_X)
-            estimates[run_idx, 4], preds["gax_preds_poly"] = bsl2_avg_gaX(df_comp.copy(), gax_model="poly", X_test=X_range, poly_degree=10)
-            estimates[run_idx, 5], preds["bax_preds_poly"] = nm1_bm_abc(df_comp.copy(), bax_model="poly", X_test=X_range, poly_degree=10)
-            estimates[run_idx, 6], preds["hax_preds_poly"] = nm2_om_pa(df_comp.copy(), hax_model="poly", X_test=X_range, f_a_X=f_a_X, poly_degree=10)
+            for p_idx, pdeg in enumerate(poly_degrees):
+                estimates[run_idx, p_idx * 3 + 1], preds[f"gax_pd_{pdeg}"] = bsl2_avg_gaX(df_comp.copy(), gax_model="poly", X_test=X_range, poly_degree=pdeg)
+                estimates[run_idx, p_idx * 3 + 2], preds[f"bax_pd_{pdeg}"] = nm1_bm_abc(df_comp.copy(), bax_model="poly", X_test=X_range, poly_degree=pdeg)
+                estimates[run_idx, p_idx * 3 + 3], preds[f"hax_pd_{pdeg}"] = nm2_om_pa(df_comp.copy(), hax_model="poly", X_test=X_range, f_a_X=f_a_X, poly_degree=pdeg)
 
         stat_bias_sq_est = np.mean(estimates - mu_a_gt, axis=0) ** 2
         stat_var_est = np.std(estimates, axis=0) ** 2
@@ -49,13 +49,13 @@ def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_t
         rmse = np.sqrt(mse)
 
         np.savetxt(os.path.join(f"{save_dir}/case_{case_idx}", f"example_bias.txt"), estimates[-1,:] - mu_a_gt, fmt='%1.4f')
-        plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, "lin")
-        plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, "poly")
+        for pdeg in poly_degrees:
+            plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, pdeg)
 
         return stat_bias_sq_est, stat_var_est, rmse
 
 
-def plot_case(save_dir, X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, pred_type):
+def plot_case(save_dir, X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, pdeg):
 
     matplotlib.rcParams['pdf.fonttype'] = 42  # no type-3
     matplotlib.rcParams['ps.fonttype'] = 42
@@ -82,31 +82,34 @@ def plot_case(save_dir, X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, pre
 
     ax2.set_xticks([])
     ax2.plot(X_test, true_gax, label=r'$g_{s=1}^a(X)$', color=cp[7], linewidth=2)
-    ax2.plot(X_test, preds[f"gax_preds_{pred_type}"], label=r'$\hat{g}_{s=1}^a(X)$', ls='--', color=cp[2], linewidth=2)
-    ax2.plot(X_test, preds[f"hax_preds_{pred_type}"], label=r'$\hat{h}_{s=1}^a(\tilde{X})$', ls='--', color=cp[0], linewidth=2)
+    ax2.plot(X_test, preds[f"gax_pd_{pdeg}"], label=r'$\hat{g}_{s=1}^a(X)$', ls='--', color=cp[2], linewidth=2)
+    ax2.plot(X_test, preds[f"hax_pd_{pdeg}"], label=r'$\hat{h}_{s=1}^a(\tilde{X})$', ls='--', color=cp[0], linewidth=2)
     ax2.plot(X_test, fax_preds, label=r'$f^a(X)$', color=cp[3], ls='-.', linewidth=2)
     ax2.scatter(df_comp.query("S==1 & A==1")["X"],df_comp.query("S==1 & A==1")["Y"], s=3, color=cp[-2], alpha=1, label=r"Trial patients ($Y$)")
     ax2.legend(fontsize="12")
 
     ax3.set_xticks([])
     ax3.plot(X_test, true_bax, label=r'$b_{s=1}^a(X) = f^a(X) - g_{s=1}^a(X)$', color=cp[-1], linewidth=2)
-    ax3.plot(X_test, preds[f"bax_preds_{pred_type}"], label=r'$\hat{b}_{s=1}^a(X)$', color=cp[6], ls='--', linewidth=2)
+    ax3.plot(X_test, preds[f"bax_pd_{pdeg}"], label=r'$\hat{b}_{s=1}^a(X)$', color=cp[6], ls='--', linewidth=2)
     ax3.scatter(df_comp.query("S==1 & A==1")["X"],df_comp.query("S==1 & A==1")["Z"], s=3, color=cp[-2], alpha=1, label=r"Trial patients ($Z$)")
     ax3.legend(fontsize="12")
 
     ax4.axhline(0, color='gray')
-    ax4.plot(X_test, preds[f"gax_preds_{pred_type}"].reshape(-1) - true_gax, label=r'$\hat{g}_{s=1}^a(X) - g_{s=1}^a(X)$', ls='dotted', color=cp[2], linewidth=3)
-    ax4.plot(X_test, preds[f"hax_preds_{pred_type}"].reshape(-1) - true_gax, label=r'$\hat{h}_{s=1}^a(\tilde{X}) - h_{s=1}^a(\tilde{X})$', ls='dotted', color=cp[0], linewidth=3)
-    ax4.plot(X_test, preds[f"bax_preds_{pred_type}"].reshape(-1) - true_bax, label=r'$\hat{b}_{s=1}^a(X) - b_{s=1}^a(X)$', ls='dotted', color=cp[6], linewidth=3)
+    ax4.plot(X_test, preds[f"gax_pd_{pdeg}"].reshape(-1) - true_gax, label=r'$\hat{g}_{s=1}^a(X) - g_{s=1}^a(X)$', ls='dotted', color=cp[2], linewidth=3)
+    ax4.plot(X_test, preds[f"hax_pd_{pdeg}"].reshape(-1) - true_gax, label=r'$\hat{h}_{s=1}^a(\tilde{X}) - h_{s=1}^a(\tilde{X})$', ls='dotted', color=cp[0], linewidth=3)
+    ax4.plot(X_test, preds[f"bax_pd_{pdeg}"].reshape(-1) - true_bax, label=r'$\hat{b}_{s=1}^a(X) - b_{s=1}^a(X)$', ls='dotted', color=cp[6], linewidth=3)
     ax4.legend(fontsize="12")
     ax4.set_xlabel(r"$X$")
 
     plt.tight_layout(pad=1.0)
-    plt.savefig(os.path.join(save_dir, f"example_img_{pred_type}.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, f"example_img_pd_{pdeg}.png"), bbox_inches='tight')
+    plt.close()
 
-def save_setting_stats(results, save_dir, methods):
+def save_setting_stats(results, save_dir, poly_degrees):
 
     n = len(results)
+    base_methods = ["gax-PD-", "bax-PD-", "hax-PD-"]
+    methods = ["fa(X)"] + [*np.concatenate([[bm + str(pd) for bm in base_methods] for pd in poly_degrees])]
 
     rmse_arr = np.vstack([tpl[2] for tpl in results])
     bias_sq_arr = np.vstack([tpl[0] for tpl in results])

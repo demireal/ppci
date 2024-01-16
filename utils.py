@@ -1,17 +1,17 @@
 import numpy as np
 from scipy import interpolate
 from sklearn.neural_network import MLPRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.preprocessing import PolynomialFeatures
-
+from sklearn.model_selection import GridSearchCV, train_test_split
 
 def sigmoid(x, beta):
     return 1 / (1 + np.exp(- x @ beta))
 
 
-def rbf_linear_kernel(X1, X2, length_scales=np.array([0.1,0.1]), alpha=np.array([0.1,0.1])):
+def rbf_linear_kernel(X1, X2, length_scales=np.array([0.1,0.1]), alpha=np.array([0.1,0.1]), var=5):
     distances = np.linalg.norm((X1[:, None, :] - X2[None, :, :]) / length_scales, axis=2)
-    rbf_term = np.exp(-0.5 * distances**2)
+    rbf_term = var * np.exp(-0.5 * distances**2)
     linear_term = np.dot(np.dot(X1, np.diag(alpha)), X2.T)
     return rbf_term + linear_term
 
@@ -64,7 +64,7 @@ def fit_trial_outcome_fn(df_comp, regressors=["X", "fa(X)"], target="Y", model="
             X_poly = np.hstack((poly.fit_transform(X[:,0].reshape(-1,1)), X[:,1].reshape(-1,1)))
         else:
             X_poly = poly.fit_transform(X)
-        model = LinearRegression(fit_intercept=True)
+        model = RidgeCV(alphas=[1e-3, 1e-2, 1e-1, 1], cv=5)
         model.fit(X_poly, y)
     else:
         raise NotImplementedError(f'{model} to fit h^a(tilde_X) is not implemented')
@@ -86,7 +86,7 @@ def fit_trial_bias_fn(df_comp, regressors="X", target="Z", model="linear", hls=(
     elif model== "poly":
         poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
         X_poly = poly.fit_transform(X)
-        model = LinearRegression(fit_intercept=True)
+        model = RidgeCV(alphas=[1e-3, 1e-2, 1e-1, 1], cv=5)
         model.fit(X_poly, z)
     else:
         raise NotImplementedError(f'{model} to fit b^a(X) is not implemented')

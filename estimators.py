@@ -20,7 +20,7 @@ def bsl2_avg_gaX(df_comp, gax_model="linear", hls=(128,32,8), activation="tanh",
     Baseline 2.
     Average the predictions of the outcome model estimated from the trial sample (S=1) in target sample (S=0).
     """
-    g_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors="X", target="Y", model=gax_model, hls=hls, activation=activation)
+    g_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors="X", target="Y", model=gax_model, hls=hls, activation=activation, poly_degree=poly_degree)
     df_tar = df_comp.query("S == 0")
 
     X_tar = np.array(df_tar['X']).reshape(-1,1)
@@ -49,7 +49,7 @@ def nm1_bm_abc(df_comp, bax_model="linear", hls=(128,32,8), activation="tanh", X
     df_tar = df_comp.query("S == 0").copy()
     mean_fax = df_tar["fa(X)"].mean()
 
-    b_a_X = fit_trial_bias_fn(df_comp.copy(), regressors="X", target="Z", model=bax_model, hls=hls, activation=activation)
+    b_a_X = fit_trial_bias_fn(df_comp.copy(), regressors="X", target="Z", model=bax_model, hls=hls, activation=activation, poly_degree=poly_degree)
 
     X_tar = np.array(df_tar['X']).reshape(-1,1)
     X_test = X_test.reshape(-1,1)
@@ -74,7 +74,7 @@ def nm2_om_pa(df_comp, hax_model="linear", hls=(128,32,8), activation="tanh", X_
     Average the predictions of the augmented outcome model estimated from the trial sample (S=1) in target sample (S=0).
     """
     df_tar = df_comp.query("S == 0").copy()
-    h_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors=["X", "fa(X)"], target="Y", model=hax_model, hls=hls, activation=activation)
+    h_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors=["X", "fa(X)"], target="Y", model=hax_model, hls=hls, activation=activation, poly_degree=poly_degree)
     
     f_a_X_test = f_a_X.predict(X_test.reshape(-1,1))
 
