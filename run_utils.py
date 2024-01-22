@@ -8,18 +8,18 @@ import seaborn as sns
 import matplotlib
 
 
-def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_trt_par, 
+def sim_one_case(out_kernel, case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_trt_par, 
                  d, big_n_rct, n_tar, n_obs, n_MC, num_runs_per_case, X_range, U_range, poly_degrees):
 
         num_pol = len(poly_degrees)
         num_est = 3 * num_pol + 1
         estimates = np.zeros((num_runs_per_case, num_est))
         preds = {}
-
-        om_A0 = sample_outcome_model_gp(om_A0_par, X_range, U_range, seed)  # GP - for the outcome model under treatment A=1
-        om_A1 = sample_outcome_model_gp(om_A1_par, X_range, U_range, seed+1)  # GP - for the outcome model under treatment A=1
-        w_sel = sample_outcome_model_gp(w_sel_par, X_range, U_range, seed+2)  # GP - for the selection score model P(S=1 | X)
-        w_trt = sample_outcome_model_gp(w_trt_par, X_range, U_range, seed+3)  # GP - for the propensity score in OBS study P(A=1 | X, S=2)
+    
+        om_A0 = sample_outcome_model_gp(om_A0_par, X_range, U_range, seed, out_kernel)  # GP - for the outcome model under treatment A=1
+        om_A1 = sample_outcome_model_gp(om_A1_par, X_range, U_range, seed+1, out_kernel)  # GP - for the outcome model under treatment A=1
+        w_sel = sample_outcome_model_gp(w_sel_par, X_range, U_range, seed+2, 'rbf')  # GP - for the selection score model P(S=1 | X)
+        w_trt = sample_outcome_model_gp(w_trt_par, X_range, U_range, seed+3, 'rbf')  # GP - for the propensity score in OBS study P(A=1 | X, S=2)
 
         CombinedData = CombinedDataModule(seed + 4, d, big_n_rct, n_tar, n_obs, n_MC, X_range, U_range, om_A0, om_A1, w_sel, w_trt)
         df_comp_big, df_obs = CombinedData.get_df() 
@@ -48,7 +48,9 @@ def sim_one_case(case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_t
         mse = np.mean((estimates - mu_a_gt) ** 2, axis=0)
         rmse = np.sqrt(mse)
 
-        np.savetxt(os.path.join(f"{save_dir}/case_{case_idx}", f"example_bias.txt"), estimates[-1,:] - mu_a_gt, fmt='%1.4f')
+        save_txt_arr = np.vstack((mu_a_gt*np.ones(len(estimates[-1,:])), estimates[-1,:], estimates[-1,:]- mu_a_gt))
+        np.savetxt(os.path.join(f"{save_dir}/case_{case_idx}", f"example_bias.txt"), save_txt_arr, fmt='%1.4f')
+        
         for pdeg in poly_degrees:
             plot_case(f"{save_dir}/case_{case_idx}", X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, preds, pdeg)
 

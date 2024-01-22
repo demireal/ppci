@@ -3,7 +3,7 @@ from scipy import interpolate
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.gaussian_process.kernels import Matern
 
 def sigmoid(x, beta):
     return 1 / (1 + np.exp(- x @ beta))
@@ -15,15 +15,16 @@ def rbf_linear_kernel(X1, X2, length_scales=np.array([0.1,0.1]), alpha=np.array(
     linear_term = np.dot(np.dot(X1, np.diag(alpha)), X2.T)
     return rbf_term + linear_term
 
-
-def sample_outcome_model_gp(param, X, U, seed):
+def sample_outcome_model_gp(param, X, U, seed, out_kernel):
 
     np.random.seed(seed)
     XX, UU = np.meshgrid(X, U)
     XU_flat = np.c_[XX.ravel(), UU.ravel()]
 
-    K = rbf_linear_kernel(XU_flat, XU_flat, np.array(param['ls']), np.array(param['alpha']))
     mean = np.zeros(len(XU_flat))
+
+    if out_kernel == 'rbf':
+        K = rbf_linear_kernel(XU_flat, XU_flat, np.array(param['ls']), np.array(param['alpha']))
 
     f_sample = np.random.multivariate_normal(mean, K)
     Y = f_sample.reshape(XX.shape)
