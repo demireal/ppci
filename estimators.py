@@ -76,7 +76,10 @@ def nm2_om_pa(df_comp, hax_model="linear", hls=(128,32,8), activation="tanh", X_
     df_tar = df_comp.query("S == 0").copy()
     h_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors=["X", "fa(X)"], target="Y", model=hax_model, hls=hls, activation=activation, poly_degree=poly_degree)
     
-    f_a_X_test = f_a_X.predict(X_test.reshape(-1,1))
+    if f_a_X == None:
+        f_a_X_test = 5 * np.random.randn(len(X_test))
+    else:
+        f_a_X_test = f_a_X.predict(X_test.reshape(-1,1))
 
     X_tar_aug = np.array(df_tar[["X", "fa(X)"]]).reshape(-1,2)
     X_test_aug = np.array([X_test, f_a_X_test]).T

@@ -9,7 +9,7 @@ import matplotlib
 
 
 def sim_one_case(out_kernel, case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_sel_par, w_trt_par, 
-                 d, big_n_rct, n_tar, n_obs, n_MC, num_runs_per_case, X_range, U_range, poly_degrees):
+                 d, big_n_rct, n_tar, n_obs, n_MC, num_runs_per_case, X_range, U_range, poly_degrees, fax_noise):
 
         num_pol = len(poly_degrees)
         num_est = 3 * num_pol + 1
@@ -26,9 +26,14 @@ def sim_one_case(out_kernel, case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_
         true_gax, true_psx = CombinedData.plot_om(save_dir=f"{save_dir}/case_{case_idx}")
         mu_a_gt, _, _, _ = CombinedData.get_true_mean(print_res=False)
 
-        f_a_X = fit_obs_outcome_fn(df_obs, regressors="X", target="Y", model="NN", hls=(256,64,16), activation="tanh")
-        df_comp_big['fa(X)'] = f_a_X.predict(np.array(df_comp_big['X']).reshape(-1,1))
-        df_comp_big['Z'] = df_comp_big['fa(X)'] - df_comp_big['Y']
+        if not fax_noise:
+            f_a_X = fit_obs_outcome_fn(df_obs, regressors="X", target="Y", model="NN", hls=(256,64,16), activation="tanh")
+            df_comp_big['fa(X)'] = f_a_X.predict(np.array(df_comp_big['X']).reshape(-1,1))
+            df_comp_big['Z'] = df_comp_big['fa(X)'] - df_comp_big['Y']
+        else:
+            f_a_X = None
+            df_comp_big['fa(X)'] = 5 * np.random.randn(len(df_comp_big))
+            df_comp_big['Z'] = df_comp_big['fa(X)'] - df_comp_big['Y']
 
         tar_idx = df_comp_big.query("S==0").index
         rct_idx = np.split(df_comp_big.query("S==1").index, num_runs_per_case)
@@ -42,6 +47,8 @@ def sim_one_case(out_kernel, case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_
                 estimates[run_idx, p_idx * 3 + 1], preds[f"gax_pd_{pdeg}"] = bsl2_avg_gaX(df_comp.copy(), gax_model="poly", X_test=X_range, poly_degree=pdeg)
                 estimates[run_idx, p_idx * 3 + 2], preds[f"bax_pd_{pdeg}"] = nm1_bm_abc(df_comp.copy(), bax_model="poly", X_test=X_range, poly_degree=pdeg)
                 estimates[run_idx, p_idx * 3 + 3], preds[f"hax_pd_{pdeg}"] = nm2_om_pa(df_comp.copy(), hax_model="poly", X_test=X_range, f_a_X=f_a_X, poly_degree=pdeg)
+
+        #plot_case_rmse(save_dir, case_idx, estimates, mu_a_gt)
 
         stat_bias_sq_est = np.mean(estimates - mu_a_gt, axis=0) ** 2
         stat_var_est = np.std(estimates, axis=0) ** 2
@@ -66,7 +73,10 @@ def plot_case(save_dir, X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, pre
     os.makedirs(save_dir, exist_ok=True)
 
     X_test = X_range.reshape(-1, 1)
-    fax_preds = f_a_X.predict(X_test)
+    if f_a_X == None:
+        fax_preds = 5 * np.random.randn(len(X_test))
+    else:
+        fax_preds = f_a_X.predict(X_test)
     true_bax = fax_preds - true_gax
 
     cp = sns.color_palette("tab10")
@@ -130,3 +140,40 @@ def save_setting_stats(results, save_dir, poly_degrees):
     df_res_wstd = pd.DataFrame(data_wstd, index=methods, columns=["RMSE", "Std.Dev.", "Squared-Bias", "Std.Dev.", "Variance", "Std.Dev."])
     df_res_wstd.to_csv(os.path.join(save_dir, f"res_wstd.csv"), float_format='%.5f')
 
+
+def plot_case_rmse(save_dir, case_idx, estimates, mu_a_gt):
+
+    rmse = np.sqrt((estimates - mu_a_gt) ** 2)
+    rmse = rmse[:,1:]
+
+    mean = np.mean(rmse, axis=0)
+    std = np.std(rmse, axis=0) / len(rmse)
+
+    poly_degs = [1,4,7,10]
+    methods = ["gax","bax","hax"]
+    fb_alpha = 0.25
+    lw = 2
+    cp = sns.color_palette("colorblind")
+    cp_ind = {"fax": -5, "gax": -1, "bax": 2, "hax": -4}
+    labels = {"fax": r"$\hat{\mu}^a_{OBS-OM}$", "gax": r"$\hat{\mu}^a_{OM}$", "bax": r"$\hat{\mu}^a_{ABC}$", "hax": r"$\hat{\mu}^a_{AOM}}$"}
+    markers = {"fax": " ", "gax": " ", "bax": "d", "hax": "*"}
+    line_styles = {"fax": "-", "gax": "--", "bax": "-", "hax": "-"}
+    fill_styles = {"fax": "full", "gax": "none", "bax": "none", "hax": "full"}
+
+    plt.figure()
+    sns.set_style("whitegrid")
+
+    for mind,met in enumerate(methods):
+        mean_rmse = mean[mind::3]
+        std_rmse = std[mind * 4 : (mind + 1) * 4]
+        lb = mean_rmse - 2 * std_rmse
+        ub = mean_rmse + 2 * std_rmse
+        plt.plot(poly_degs, mean_rmse, color=cp[cp_ind[met]], linewidth=lw, linestyle=line_styles[met], marker=markers[met], fillstyle=fill_styles[met], label=labels[met])
+        plt.fill_between(poly_degs, lb, ub, color=cp[cp_ind[met]], alpha=fb_alpha)
+
+    plt.xticks(poly_degs)
+    plt.xlabel("Degree of polynomial fit")
+    plt.ylabel("RMSE")
+    plt.legend()
+    plt.savefig(os.path.join(f"{save_dir}/case_{case_idx}/fig.png"), bbox_inches="tight")
+    plt.close()

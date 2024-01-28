@@ -20,7 +20,7 @@ class CombinedDataModule:
                 om_A0=None,
                 om_A1=None,
                 w_sel=None,
-                w_trt=None,
+                w_trt=None
                 ):
 
         self.seed = seed
