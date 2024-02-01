@@ -48,7 +48,7 @@ def sim_one_case(out_kernel, case_idx, seed, save_dir,  om_A0_par, om_A1_par, w_
                 estimates[run_idx, p_idx * 3 + 2], preds[f"bax_pd_{pdeg}"] = nm1_bm_abc(df_comp.copy(), bax_model="poly", X_test=X_range, poly_degree=pdeg)
                 estimates[run_idx, p_idx * 3 + 3], preds[f"hax_pd_{pdeg}"] = nm2_om_pa(df_comp.copy(), hax_model="poly", X_test=X_range, f_a_X=f_a_X, poly_degree=pdeg)
 
-        #plot_case_rmse(save_dir, case_idx, estimates, mu_a_gt)
+        plot_case_rmse(save_dir, case_idx, estimates, mu_a_gt)
 
         stat_bias_sq_est = np.mean(estimates - mu_a_gt, axis=0) ** 2
         stat_var_est = np.std(estimates, axis=0) ** 2
@@ -92,7 +92,6 @@ def plot_case(save_dir, X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, pre
     ax1.plot(X_test.reshape(-1), 1 - true_psx, color=cp[5], label='P(S=0 | X)')
     ax1.fill_between(X_test.reshape(-1), true_psx, np.zeros(51), color=cp[4], alpha=0.2, label='P(S=1 | X)')
     ax1.fill_between(X_test.reshape(-1), 1 - true_psx, np.zeros(51), color=cp[5], alpha=0.2, label='P(S=0 | X)')
-    # ax1.legend(fontsize="12")
     ax1.tick_params(axis='x', colors='dimgray')
     ax1.tick_params(axis='y', colors='dimgray')
 
@@ -100,26 +99,17 @@ def plot_case(save_dir, X_range, df_comp, df_obs, f_a_X, true_gax, true_psx, pre
     ax2.plot(X_test, true_gax, label=r'$g_1 (X)$', color=cp[6], linewidth=2)
     ax2.plot(X_test, preds[f"gax_pd_{pdeg}"], label=r'$\hat{g}_1 (X)$', ls='--', color=cp[1], linewidth=2)
     ax2.plot(X_test, preds[f"hax_pd_{pdeg}"], label=r'$\hat{h}_1 (\tilde{X})$', ls='--', color=cp[2], linewidth=2)
-    ax2.plot(X_test, fax_preds, label=r'$f_1 (X)$', color=cp[0], ls='-.', linewidth=2)
+    ax2.plot(X_test, fax_preds, label=r'$f_1 (X)$', color=cp[0], ls=':', linewidth=2)
     ax2.scatter(df_comp.query("S==1 & A==1")["X"],df_comp.query("S==1 & A==1")["Y"], s=3, color=cp[7], alpha=1, label=r"Trial patients ($Y$)")
-    # ax2.legend(fontsize="12")
     ax2.tick_params(axis='x', colors='dimgray')
     ax2.tick_params(axis='y', colors='dimgray')
 
     ax3.plot(X_test, true_bax, label=r'$b_1 (X) = f_1 (X) - g_1 (X)$', color='dimgray', linewidth=2)
     ax3.plot(X_test, preds[f"bax_pd_{pdeg}"], label=r'$\hat{b}_1 (X)$', color=cp[3], ls='--', linewidth=2)
     ax3.scatter(df_comp.query("S==1 & A==1")["X"],df_comp.query("S==1 & A==1")["Z"], s=3, color=cp[7], alpha=1, label=r"Trial patients ($Z$)")
-    # ax3.legend(fontsize="12")
     ax3.tick_params(axis='x', colors='dimgray')
     ax3.tick_params(axis='y', colors='dimgray')
     ax3.set_xlabel(r"$X$")
-
-    # ax4.axhline(0, color='gray')
-    # ax4.plot(X_test, preds[f"gax_pd_{pdeg}"].reshape(-1) - true_gax, label=r'$\hat{g}_{s=1}^a(X) - g_{s=1}^a(X)$', ls='dotted', color=cp[2], linewidth=3)
-    # ax4.plot(X_test, preds[f"hax_pd_{pdeg}"].reshape(-1) - true_gax, label=r'$\hat{h}_{s=1}^a(\tilde{X}) - h_{s=1}^a(\tilde{X})$', ls='dotted', color=cp[0], linewidth=3)
-    # ax4.plot(X_test, preds[f"bax_pd_{pdeg}"].reshape(-1) - true_bax, label=r'$\hat{b}_{s=1}^a(X) - b_{s=1}^a(X)$', ls='dotted', color=cp[6], linewidth=3)
-    # ax4.legend(fontsize="12")
-    # ax4.set_xlabel(r"$X$")
 
     plt.tight_layout(pad=1.0)
     plt.savefig(os.path.join(save_dir, f"example_img_pd_{pdeg}.svg"), bbox_inches='tight')
@@ -152,37 +142,46 @@ def save_setting_stats(results, save_dir, poly_degrees):
 
 def plot_case_rmse(save_dir, case_idx, estimates, mu_a_gt):
 
-    rmse = np.sqrt((estimates - mu_a_gt) ** 2)
-    rmse = rmse[:,1:]
+    rmse_full = np.sqrt((estimates - mu_a_gt) ** 2)
+    rmse = rmse_full[:,1:]
 
     mean = np.mean(rmse, axis=0)
     std = np.std(rmse, axis=0) / len(rmse)
 
     poly_degs = [1,4,7,10]
-    methods = ["gax","bax","hax"]
+    methods = ["gax","bax","hax","fax"]
     fb_alpha = 0.25
     lw = 2
-    cp = sns.color_palette("colorblind")
-    cp_ind = {"fax": -5, "gax": -1, "bax": 2, "hax": -4}
+    cp = ["salmon", "#34b6c6", "mediumpurple","#79ad41"]
+    cp_ind = {"fax": 0, "gax": 1, "bax": 3, "hax": 2}
     labels = {"fax": r"$\hat{\mu}^a_{OBS-OM}$", "gax": r"$\hat{\mu}^a_{OM}$", "bax": r"$\hat{\mu}^a_{ABC}$", "hax": r"$\hat{\mu}^a_{AOM}}$"}
-    markers = {"fax": " ", "gax": " ", "bax": "d", "hax": "*"}
-    line_styles = {"fax": "-", "gax": "--", "bax": "-", "hax": "-"}
+    markers = {"fax": " ", "gax": " ", "bax": " ", "hax": " "}
+    line_styles = {"fax": "-", "gax": "-", "bax": "-", "hax": "-"}
     fill_styles = {"fax": "full", "gax": "none", "bax": "none", "hax": "full"}
 
     plt.figure()
     sns.set_style("whitegrid")
 
     for mind,met in enumerate(methods):
-        mean_rmse = mean[mind::3]
-        std_rmse = std[mind * 4 : (mind + 1) * 4]
-        lb = mean_rmse - 2 * std_rmse
-        ub = mean_rmse + 2 * std_rmse
-        plt.plot(poly_degs, mean_rmse, color=cp[cp_ind[met]], linewidth=lw, linestyle=line_styles[met], marker=markers[met], fillstyle=fill_styles[met], label=labels[met])
+        if met == 'fax':
+            mean = np.mean(rmse_full, axis=0)
+            std = np.std(rmse_full, axis=0) / len(rmse)
+            mean_rmse = np.array([mean[0], mean[0], mean[0], mean[0]])
+            std_rmse = np.array([std[0], std[0], std[0], std[0]])
+            lb = mean_rmse - 2 * std_rmse
+            ub = mean_rmse + 2 * std_rmse
+        else:
+            mean_rmse = mean[mind::3]
+            std_rmse = std[mind::3]
+            lb = mean_rmse - 2 * std_rmse
+            ub = mean_rmse + 2 * std_rmse
+        plt.plot(poly_degs, mean_rmse, color=cp[cp_ind[met]], linewidth=lw, linestyle=line_styles[met], marker=markers[met], fillstyle=fill_styles[met])
         plt.fill_between(poly_degs, lb, ub, color=cp[cp_ind[met]], alpha=fb_alpha)
 
     plt.xticks(poly_degs)
     plt.xlabel("Degree of polynomial fit")
     plt.ylabel("RMSE")
-    plt.legend()
+    # plt.legend()
     plt.savefig(os.path.join(f"{save_dir}/case_{case_idx}/fig.png"), bbox_inches="tight")
+    plt.savefig(os.path.join(f"{save_dir}/case_{case_idx}/fig.svg"), bbox_inches="tight")
     plt.close()
