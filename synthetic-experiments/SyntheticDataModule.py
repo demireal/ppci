@@ -1,46 +1,49 @@
 import numpy as np
 import pandas as pd
-import random, os
+import random
+import os 
 import matplotlib.pyplot as plt
 import matplotlib
 from scipy.special import expit
 from utils import * 
 
 
-class CombinedDataModule:
-    def __init__(self, 
-                seed=42,
-                d=2, 
+class SyntheticDataModule:
+    def __init__(self,  
                 n_rct=200,
                 n_tar=2000,
                 n_obs=10000,
                 n_MC=100000,
+                gp_funcs=None,
+                covs=["X", "U"],
                 X_range=np.linspace(-1,1,51),
                 U_range=np.linspace(-1,1,51),
-                om_A0=None,
-                om_A1=None,
-                w_sel=None,
-                w_trt=None
+                pasx={"lb":0.1, "ub":0.9, "trial":0.5},
+                seed=42,
                 ):
-
-        self.seed = seed
-        self.d = d  # covariates dimensionality (integer)
+        
         self.n_rct = n_rct
         self.n_tar = n_tar
         self.n_obs = n_obs
         self.n = 10 * (n_rct + n_tar)  # auxiliary variable used in data generating
         self.n_MC = n_MC  # monte-carlo sample size to calculate "true mean" in the target population
+        self.covs = covs
         self.X = X_range
         self.U = U_range
+        self.seed = seed
+        self.d = len(covs)  # covariates dimensionality (integer)
 
-        self.covs= ["X", "U"]
+        self.om_A0 = gp_funcs["om_A0"]   # GP for the outcome model under treatment A=0
+        self.om_A1 = gp_funcs["om_A1"]   # GP for the outcome model under treatment A=1
+        self.w_sel = gp_funcs["w_sel"]   # GP for the selection score model P(S=1 | X)
+        self.w_trt = gp_funcs["w_trt"]   # GP for the propensity score in OBS study P(A=1 | X, S=2)
+
         self.XX, self.UU = np.meshgrid(self.X, self.U)
         self.XU_flat = np.c_[self.XX.ravel(), self.UU.ravel()]
 
-        self.om_A0 = om_A0  # GP for the outcome model under treatment A=0
-        self.om_A1 = om_A1  # GP for the outcome model under treatment A=1
-        self.w_sel = w_sel  # GP for the selection score model P(S=1 | X)
-        self.w_trt = w_trt  # GP for the propensity score in OBS study P(A=1 | X, S=2)
+        self.prop_clip_lb = pasx["lb"]  #  exclude patients whose probability of treatment is < 0.1 
+        self.prop_clip_ub = pasx["ub"]  #  exclude patients whose probability of treatment is > 0.9
+        self.pas1 = pasx["trial"]  # probability of treatment assignment in the trial
 
         np.random.seed(self.seed)
         self.df  = self._generate_data()
@@ -55,7 +58,7 @@ class CombinedDataModule:
                 df = pd.DataFrame(index=np.arange(self.n))
                 df[self.covs] = 2 * np.random.rand(self.n, self.d) - 1  # Uniform[-1,1]
 
-                df["P(S=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_sel(row["X"], row["U"])[0]), 0.1, 0.9), axis=1)
+                df["P(S=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_sel(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
                 df["S"] = np.array(df["P(S=1|X)"] > np.random.uniform(size=self.n), dtype=int)  # selection into trial via sampling from Bernoulli(P(S=1|X))
 
                 rct_idx = random.sample(df.index[df["S"] == 1].tolist(), self.n_rct)
@@ -63,7 +66,7 @@ class CombinedDataModule:
 
                 complete=True
             except:
-                print("generating data...")
+                print("Please wait patiently as we generate your synthetic nested trial data...")
                 self.n = 2 * self.n
 
         df = df.loc[rct_idx + tar_idx, :].copy().reset_index(drop=True)
@@ -71,7 +74,7 @@ class CombinedDataModule:
         df['Y0'] = df.apply(lambda row: self.om_A0(row["X"], row["U"])[0], axis=1)
         df['Y1'] = df.apply(lambda row: self.om_A1(row["X"], row["U"])[0], axis=1)
 
-        df.loc[df.S == 1, "A"] = np.array(0.5 > np.random.uniform(size=self.n_rct), dtype=int)  # random sampling treatment with probability 1/2 for A=1
+        df.loc[df.S == 1, "A"] = np.array(self.pas1 > np.random.uniform(size=self.n_rct), dtype=int)  # random sampling treatment with probability 1/2 for A=1
 
         df.loc[df.S == 1, "Y"] = df.loc[df.S == 1, "Y1"] * df.loc[df.S == 1, "A"] +\
                                 df.loc[df.S == 1, "Y0"] * (1 - df.loc[df.S == 1, "A"])
@@ -86,7 +89,7 @@ class CombinedDataModule:
         df = pd.DataFrame(index=np.arange(self.n_obs))
         df[self.covs] = 2 * np.random.rand(self.n_obs, self.d) - 1
 
-        df["P(A=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_trt(row["X"], row["U"])[0]), 0.1, 0.9), axis=1)
+        df["P(A=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_trt(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
         df["A"] = np.array(df["P(A=1|X)"] > np.random.uniform(size=self.n_obs), dtype=int) 
 
         df['Y0'] = df.apply(lambda row: self.om_A0(row["X"], row["U"])[0], axis=1)
@@ -138,14 +141,14 @@ class CombinedDataModule:
         print(f"X mean (OBS study): {X_mean:.2f}")
     
     
-    def plot_om(self, save=False, save_dir=None):
+    def plot_om(self, save_dir):
 
         matplotlib.rcParams['pdf.fonttype'] = 42  # no type-3
         matplotlib.rcParams['ps.fonttype'] = 42
 
         Yp = self.om_A1(self.X, self.U)
-        psx = np.clip(expit(self.w_sel(self.X, self.U)), 0.1, 0.9)
-        pax = np.clip(expit(self.w_trt(self.X, self.U)), 0.1, 0.9)
+        psx = np.clip(expit(self.w_sel(self.X, self.U)), self.prop_clip_lb, self.prop_clip_ub)
+        pax = np.clip(expit(self.w_trt(self.X, self.U)), self.prop_clip_lb, self.prop_clip_ub)
 
         fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(12, 15))
 

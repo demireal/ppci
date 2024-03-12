@@ -4,10 +4,9 @@ from sklearn.preprocessing import PolynomialFeatures
 from utils import *
 
 
-def bsl1_avg_faX(df_comp):
+def bsl1_os_om(df_comp):
     """
-    Baseline 1.
-    Average the predictions of the predictive model f^a(X) (trained on observational data) in target sample.
+    Baseline 1: Average the predictions of the predictive model f^a(x) (trained on observational data) in target sample.
     """
     df_tar = df_comp.query("S == 0")
     hat_mu = df_tar["fa(X)"].mean()
@@ -15,83 +14,99 @@ def bsl1_avg_faX(df_comp):
     return hat_mu
 
 
-def bsl2_avg_gaX(df_comp, gax_model="linear", hls=(128,32,8), activation="tanh", X_test=np.linspace(-1,1,51), poly_degree=10):
+def bsl2_om(df_comp):
     """
-    Baseline 2.
-    Average the predictions of the outcome model estimated from the trial sample (S=1) in target sample (S=0).
+    Baseline 2. Average the predictions of the outcome model g^a(X) in target sample (S=0), which is estimated from the trial sample (S=1).
     """
-    g_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors="X", target="Y", model=gax_model, hls=hls, activation=activation, poly_degree=poly_degree)
+    df_tar = df_comp.query("S == 0")
+    hat_mu = df_tar["ga(X)"].mean()
+
+    return hat_mu
+
+
+def bsl3_ipw(df_comp):
+    """
+    Baseline 3. Weighting adjustment in the trial.
+    """
+    num = sum(df_comp["Y"] * df_comp["w(XSA)"])
+    denum = sum(df_comp["w(XSA)"])
+    hat_mu = num / denum
+
+    return hat_mu
+
+
+def bsl4_dr(df_comp):
+    """
+    Baseline 4. DR estimator using trial data only.
+    """
+    hat_p = df_comp["S"].mean()
+    n = len(df_comp)
+
+    df_comp["res"] = df_comp["Y"] - df_comp["ga(X)"]
+    
+    df_comp["sum_i"] = df_comp.apply(lambda r: \
+        (1 - r["S"]) * r["ga(X)"] + r["w(XSA)"] * r["res"], axis=1)
+    
+    hat_mu = sum(df_comp["sum_i"]) / (n * (1 - hat_p))
+
+    return hat_mu
+
+
+def nm1_abc(df_comp):
+    """
+    New model 1. Bias Model - Additive Bias Correction 
+    """
     df_tar = df_comp.query("S == 0")
 
-    X_tar = np.array(df_tar['X']).reshape(-1,1)
-    X_test = X_test.reshape(-1,1)
-
-    if gax_model == "poly":
-        poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
-        X_tar = poly.fit_transform(X_tar)
-        X_test = poly.fit_transform(X_test)
-
-    y_preds = g_a_X.predict(X_tar)
-    y_test = g_a_X.predict(X_test)
-
-    hat_mu = np.mean(y_preds)
-
-    return hat_mu, y_test
-
-
-def nm1_bm_abc(df_comp, bax_model="linear", hls=(128,32,8), activation="tanh", X_test=np.linspace(-1,1,51), poly_degree=10):
-    """
-    (Ours 1) New model 1. (Bias Model - Additive Bias Correction)
-    Step 1. Average the predictions of the predictive model f^a(X) (trained on observational data) in target sample (Baseline 1 exactly).
-    Step 2. Fit a "bias function" for the trial using the errors (Z) of the predictive model in the trial sample (S=1)
-    Step 3. Average the bias function in the target sample (S=0) and subtract this from Step 1.
-    """
-    df_tar = df_comp.query("S == 0").copy()
     mean_fax = df_tar["fa(X)"].mean()
+    mean_bax = df_tar["ba(X)"].mean()
+    hat_mu = mean_fax - mean_bax
 
-    b_a_X = fit_trial_bias_fn(df_comp.copy(), regressors="X", target="Z", model=bax_model, hls=hls, activation=activation, poly_degree=poly_degree)
-
-    X_tar = np.array(df_tar['X']).reshape(-1,1)
-    X_test = X_test.reshape(-1,1)
-
-    if bax_model == "poly":
-        poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
-        X_tar = poly.fit_transform(X_tar)
-        X_test = poly.fit_transform(X_test)
-        
-    z_preds = b_a_X.predict(X_tar)
-    z_test = b_a_X.predict(X_test)
-
-    mean_z = np.mean(z_preds)
-    hat_mu = mean_fax - mean_z
-
-    return hat_mu, z_test
+    return hat_mu
 
 
-def nm2_om_pa(df_comp, hax_model="linear", hls=(128,32,8), activation="tanh", X_test=np.linspace(-1,1,51), f_a_X=None, poly_degree=10):
+def nm2_aom(df_comp):
     """
-    (Ours 2) New model 2. (Outcome Model - Prognostics Adjustment)
-    Average the predictions of the augmented outcome model estimated from the trial sample (S=1) in target sample (S=0).
+    New model 2. Augmented Outcome Model
     """
-    df_tar = df_comp.query("S == 0").copy()
-    h_a_X = fit_trial_outcome_fn(df_comp.copy(), regressors=["X", "fa(X)"], target="Y", model=hax_model, hls=hls, activation=activation, poly_degree=poly_degree)
+    df_tar = df_comp.query("S == 0")
+    hat_mu = df_tar["ha(X)"].mean()
     
-    if f_a_X == None:
-        f_a_X_test = 5 * np.random.randn(len(X_test))
-    else:
-        f_a_X_test = f_a_X.predict(X_test.reshape(-1,1))
+    return hat_mu
 
-    X_tar_aug = np.array(df_tar[["X", "fa(X)"]]).reshape(-1,2)
-    X_test_aug = np.array([X_test, f_a_X_test]).T
 
-    if hax_model == "poly":
-        poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
-        X_tar_aug = np.hstack((poly.fit_transform(X_tar_aug[:,0].reshape(-1,1)), X_tar_aug[:,1].reshape(-1,1)))
-        X_test_aug = np.hstack((poly.fit_transform(X_test_aug[:,0].reshape(-1,1)), X_test_aug[:,1].reshape(-1,1)))
+def nm3_dr_abc(df_comp):
+    """
+    New method 3. DR estimator for additive bias correction.
+    """
+    hat_p = df_comp["S"].mean()
+    n = len(df_comp)
 
-    y_preds = h_a_X.predict(X_tar_aug)
-    y_test = h_a_X.predict(X_test_aug)
+    df_comp["res"] = df_comp["Z"] - df_comp["ba(X)"]
+    
+    df_comp["sum_i"] = df_comp.apply(lambda r: \
+        (1 - r["S"]) * r["ba(X)"] + r["w(XSA)"] * r["res"], axis=1)
+    
+    st = sum(df_comp["sum_i"]) / (n * (1 - hat_p))
+    ft = bsl1_os_om(df_comp)
+    hat_mu = ft - st
 
-    hat_mu = np.mean(y_preds)    
+    return hat_mu
 
-    return hat_mu, y_test
+
+def nm4_dr_aom(df_comp):
+    """
+    New method 4. DR estimator for augmented outcome model.
+    """
+    hat_p = df_comp["S"].mean()
+    n = len(df_comp)
+
+    df_comp["res"] = df_comp["Y"] - df_comp["ha(X)"]
+    
+    df_comp["sum_i"] = df_comp.apply(lambda r: \
+        (1 - r["S"]) * r["ha(X)"] + r["w(XSA)"] * r["res"], axis=1)
+    
+    hat_mu = sum(df_comp["sum_i"]) / (n * (1 - hat_p))
+
+    return hat_mu
+
