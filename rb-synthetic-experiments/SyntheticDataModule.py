@@ -13,8 +13,8 @@ class SyntheticDataModule:
                 n_rct=200,
                 n_tar=2000,
                 n_obs=10000,
-                n_MC=100000,
-                gp_funcs=None,
+                n_MC=10000,
+                gp_params=None,
                 covs=["X", "U"],
                 X_range=np.linspace(-1,1,51),
                 U_range=np.linspace(-1,1,51),
@@ -33,10 +33,20 @@ class SyntheticDataModule:
         self.seed = seed
         self.d = len(covs)  # covariates dimensionality (integer)
 
-        self.om_A0 = gp_funcs["om_A0"]   # GP for the outcome model under treatment A=0
-        self.om_A1 = gp_funcs["om_A1"]   # GP for the outcome model under treatment A=1
-        self.w_sel = gp_funcs["w_sel"]   # GP for the selection score model P(S=1 | X)
-        self.w_trt = gp_funcs["w_trt"]   # GP for the propensity score in OBS study P(A=1 | X, S=2)
+        np.random.seed(self.seed)
+
+        self.poX = list(np.arange(1, gp_params["om_A1_par"]["xdeg"] + 1))
+        self.poU = list(np.arange(1, gp_params["om_A1_par"]["udeg"] + 1))
+
+        X_coef = np.random.uniform(gp_params["om_A1_par"]["xcoef"][0], gp_params["om_A1_par"]["xcoef"][1], len(self.poX))
+        U_coef = np.random.uniform(gp_params["om_A1_par"]["ucoef"][0], gp_params["om_A1_par"]["ucoef"][1], len(self.poU))
+
+        self.poly_covs = [f"X{i}" for i in self.poX] + [f"U{i}" for i in self.poU] 
+        self.poly_coef = np.concatenate((X_coef,U_coef))
+        self.poly_bias = np.random.uniform(-1,1)
+
+        self.w_sel = sample_outcome_model_gp(X_range, U_range, gp_params["w_sel_par"], self.seed + 1)  # GP - selection score model P(S=1|X)
+        self.w_trt = sample_outcome_model_gp(X_range, U_range, gp_params["w_trt_par"], self.seed + 2)  # GP - propensity score in OBS study P(A=1|X, S=2)
 
         self.XX, self.UU = np.meshgrid(self.X, self.U)
         self.XU_flat = np.c_[self.XX.ravel(), self.UU.ravel()]
@@ -44,9 +54,7 @@ class SyntheticDataModule:
         self.prop_clip_lb = pasx["lb"]  #  exclude patients whose probability of treatment is < 0.1 
         self.prop_clip_ub = pasx["ub"]  #  exclude patients whose probability of treatment is > 0.9
         self.pas1 = pasx["trial"]  # probability of treatment assignment in the trial
-        self.sbl, self.sbu = 0.5, 1
 
-        np.random.seed(self.seed)
         self.df  = self._generate_data()
         self.df_obs = self._generate_data_obs()
 
@@ -59,12 +67,8 @@ class SyntheticDataModule:
                 df = pd.DataFrame(index=np.arange(self.n))
                 df[self.covs] = 2 * np.random.rand(self.n, self.d) - 1  # Uniform[-1,1]
 
-                # df["P(S=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_sel(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
-                # df["S"] = np.array(df["P(S=1|X)"] > np.random.uniform(size=self.n), dtype=int)  # selection into trial via sampling from Bernoulli(P(S=1|X))
-
-                df["P(S=0|X)"] = df.apply(lambda row: \
-                            int(self.sbl < row["X"] < self.sbu) * np.clip(expit(self.w_sel(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
-                df["S"] = np.array(df["P(S=0|X)"] < np.random.uniform(size=self.n), dtype=int)  # selection into trial via sampling from Bernoulli(P(S=1|X))
+                df["P(S=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_sel(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
+                df["S"] = np.array(df["P(S=1|X)"] > np.random.uniform(size=self.n), dtype=int)  # selection into trial via sampling from Bernoulli(P(S=1|X))
 
                 rct_idx = random.sample(df.index[df["S"] == 1].tolist(), self.n_rct)
                 tar_idx = random.sample(df.index[df["S"] == 0].tolist(), self.n_tar)
@@ -74,10 +78,15 @@ class SyntheticDataModule:
                 print("Please wait patiently as we generate your synthetic nested trial data...")
                 self.n = 2 * self.n
 
+            for order in self.poX:
+                df[f'X{order}'] = df['X'].apply(lambda x: compute_legendre_polynomials(x, order))
+            for order in self.poU:
+                df[f'U{order}'] = df['U'].apply(lambda u: compute_legendre_polynomials(u, order))
+
         df = df.loc[rct_idx + tar_idx, :].copy().reset_index(drop=True)
 
-        df['Y0'] = df.apply(lambda row: self.om_A0(row["X"], row["U"])[0], axis=1)
-        df['Y1'] = df.apply(lambda row: self.om_A1(row["X"], row["U"])[0], axis=1)
+        df['Y0'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias
+        df['Y1'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias
 
         df.loc[df.S == 1, "A"] = np.array(self.pas1 > np.random.uniform(size=self.n_rct), dtype=int)  # random sampling treatment with probability 1/2 for A=1
 
@@ -94,11 +103,16 @@ class SyntheticDataModule:
         df = pd.DataFrame(index=np.arange(self.n_obs))
         df[self.covs] = 2 * np.random.rand(self.n_obs, self.d) - 1
 
+        for order in self.poX:
+            df[f'X{order}'] = df['X'].apply(lambda x: compute_legendre_polynomials(x, order))
+        for order in self.poU:
+            df[f'U{order}'] = df['U'].apply(lambda u: compute_legendre_polynomials(u, order))
+
         df["P(A=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_trt(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
         df["A"] = np.array(df["P(A=1|X)"] > np.random.uniform(size=self.n_obs), dtype=int) 
 
-        df['Y0'] = df.apply(lambda row: self.om_A0(row["X"], row["U"])[0], axis=1)
-        df['Y1'] = df.apply(lambda row: self.om_A1(row["X"], row["U"])[0], axis=1)
+        df['Y0'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias
+        df['Y1'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias
 
         df["Y"] = df["Y1"] * df["A"] + df["Y0"] * (1 - df["A"])
 
@@ -112,15 +126,18 @@ class SyntheticDataModule:
     
 
     def get_true_mean(self, print_res=False):  
-        np.random.seed(self.seed + 1)
         df = pd.DataFrame(index=np.arange(self.n_MC))
         df[self.covs] = 2 * np.random.rand(self.n_MC, self.d) - 1  # Uniform[-1,1]
+
+        for order in self.poX:
+            df[f'X{order}'] = df['X'].apply(lambda x: compute_legendre_polynomials(x, order))
+        for order in self.poU:
+            df[f'U{order}'] = df['U'].apply(lambda u: compute_legendre_polynomials(u, order))
 
         df["P(S=1|X)"] = df.apply(lambda row: expit(self.w_sel(row["X"], row["U"])[0]), axis=1)
         df["S"] = np.array(df["P(S=1|X)"] > np.random.uniform(size=self.n_MC), dtype=int)  # selection into trial via sampling from Bernoulli(P(S=1|X))
 
-        df['Y0'] = df.apply(lambda row: self.om_A0(row["X"], row["U"])[0], axis=1)
-        df['Y1'] = df.apply(lambda row: self.om_A1(row["X"], row["U"])[0], axis=1)
+        df['Y1'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias
 
         n_MC_tar = len(df.loc[df.S == 0])
         n_MC_rct = len(df.loc[df.S == 1])
@@ -151,7 +168,23 @@ class SyntheticDataModule:
         matplotlib.rcParams['pdf.fonttype'] = 42  # no type-3
         matplotlib.rcParams['ps.fonttype'] = 42
 
-        Yp = self.om_A1(self.X, self.U)
+        Yp = np.zeros((len(self.X), len(self.U)))
+
+        for xi, x in enumerate(self.X):
+            for ui, u in enumerate(self.U):
+                poly_x = np.zeros(len(self.poX))
+                poly_u = np.zeros(len(self.poU))
+
+                for pxi, order in enumerate(self.poX):
+                    poly_x[pxi] = compute_legendre_polynomials(x, order)
+                for uxi, order in enumerate(self.poU):
+                    poly_u[uxi] = compute_legendre_polynomials(u, order)
+
+                poly_ft = np.concatenate((poly_x, poly_u))
+                Yp[xi,ui] = poly_ft @ self.poly_coef + self.poly_bias
+        
+        Yp = Yp.T
+
         psx = np.clip(expit(self.w_sel(self.X, self.U)), self.prop_clip_lb, self.prop_clip_ub)
         pax = np.clip(expit(self.w_trt(self.X, self.U)), self.prop_clip_lb, self.prop_clip_ub)
 

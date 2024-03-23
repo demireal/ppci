@@ -6,8 +6,9 @@ warnings.warn = warn
 import numpy as np
 from scipy import interpolate
 from sklearn.neural_network import MLPRegressor
-from sklearn.linear_model import RidgeCV, LogisticRegressionCV
+from sklearn.linear_model import LinearRegression, RidgeCV, LogisticRegressionCV
 from sklearn.preprocessing import PolynomialFeatures
+from scipy.special import legendre
 
 
 def rbf_linear_kernel(X1, X2, length_scales=np.array([0.1,0.1]), alpha=np.array([0.1,0.1]), var=5):  # works with 2D covariates only
@@ -49,7 +50,8 @@ def regression_model(df, regressors, target, model, params):
         else:
             X_poly = poly.fit_transform(X)
 
-        model = RidgeCV(alphas=params["Cs"], cv=params["cv_folds"])
+        model = LinearRegression()
+        #model = RidgeCV(alphas=params["Cs"], cv=params["cv_folds"])
         model.fit(X_poly, y)
 
     elif model == "NN":
@@ -86,14 +88,16 @@ def logistic_model(df, adj_covs, target, model, params):
 
 def get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, regressors, model, pdeg, X_test):
 
-    if f_a_X == "noise":
-        f_a_X_test = 5 * np.random.randn(len(X_test))
-    else:
-        f_a_X_test = f_a_X.predict(X_test.reshape(-1, 1))
-
     if model == "poly":
         poly = PolynomialFeatures(degree=pdeg, include_bias=False)
         X_test = poly.fit_transform(X_test.reshape(-1,len(regressors)))
+
+        if f_a_X == "noise":
+            f_a_X_test = 5 * np.random.randn(len(X_test))
+        else:
+            #f_a_X_test = f_a_X.predict(X_test.reshape(-1, 1))
+            f_a_X_test = f_a_X.predict(X_test)
+
         X_test_aug = np.hstack((X_test.reshape(-1, pdeg), f_a_X_test.reshape(-1, 1)))
 
     gax_test = g_a_X.predict(X_test)   
@@ -101,3 +105,7 @@ def get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, regressors, model, pdeg, X_test):
     hax_test = h_a_X.predict(X_test_aug) 
 
     return gax_test, bax_test, hax_test
+
+
+def compute_legendre_polynomials(x, order):
+    return legendre(order)(x)

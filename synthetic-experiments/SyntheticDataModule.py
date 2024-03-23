@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from scipy.special import expit
 from utils import * 
+import pdb
 
 
 class SyntheticDataModule:
@@ -152,6 +153,7 @@ class SyntheticDataModule:
         matplotlib.rcParams['ps.fonttype'] = 42
 
         Yp = self.om_A1(self.X, self.U)
+        breakpoint()
         psx = np.clip(expit(self.w_sel(self.X, self.U)), self.prop_clip_lb, self.prop_clip_ub)
         pax = np.clip(expit(self.w_trt(self.X, self.U)), self.prop_clip_lb, self.prop_clip_ub)
 

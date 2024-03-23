@@ -66,24 +66,24 @@ for n_rct in n_rct_list:
 
         gp_params = {"om_A0_par": om_A0_par, "om_A1_par": om_A1_par, "w_sel_par": w_sel_par, "w_trt_par": w_trt_par}
 
-        save_dir = f"./new_res_all_large/mpx_nrct_{n_rct}/gp_draw_{ns}"
+        save_dir = f"./dum_new_res_all_large/mpx_nrct_{n_rct}/gp_draw_{ns}"
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, f"settings_{ns}.json"), 'w') as json_file:
             json_file.write(json.dumps(gp_params, indent=4))
 
-        results = \
-        Parallel(n_jobs=36)(
-                    delayed(sim_cases) 
-                    (
-                    case_idx, gp_params, params,\
-                    all_covs, adj_covs, big_n_rct, n_tar, n_obs, n_MC, X_range, U_range, pasx, \
-                    num_runs_per_case, fax_noise, random_seed, save_dir \
-                    ) 
-                    for case_idx, random_seed in enumerate(case_seeds)
-                )
+        # results = \
+        # Parallel(n_jobs=36)(
+        #             delayed(sim_cases) 
+        #             (
+        #             case_idx, gp_params, params,\
+        #             all_covs, adj_covs, big_n_rct, n_tar, n_obs, n_MC, X_range, U_range, pasx, \
+        #             num_runs_per_case, fax_noise, random_seed, save_dir \
+        #             ) 
+        #             for case_idx, random_seed in enumerate(case_seeds)
+        #         )
 
-        # sim_cases(1, gp_params, params,\
-        #              all_covs, adj_covs, big_n_rct, n_tar, n_obs, n_MC, X_range, U_range, pasx, \
-        #              num_runs_per_case, fax_noise, 42, save_dir) 
+        sim_cases(1, gp_params, params,\
+                     all_covs, adj_covs, big_n_rct, n_tar, n_obs, n_MC, X_range, U_range, pasx, \
+                     num_runs_per_case, fax_noise, 42, save_dir) 
         
-        save_setting_stats(results, save_dir, poly_degrees)
+        # save_setting_stats(results, save_dir, poly_degrees)

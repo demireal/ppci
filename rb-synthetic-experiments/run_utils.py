@@ -15,21 +15,19 @@ def sim_cases(case_idx, gp_params, params,
                 all_covs, adj_covs, big_n_rct, n_tar, n_obs, n_MC, X_range, U_range, pasx,
                 num_runs_per_case, fax_noise, seed, save_dir):
 
-        gp_funcs = {}
-    
-        gp_funcs["om_A0"] = sample_outcome_model_gp(X_range, U_range, gp_params["om_A0_par"], seed)      # GP - outcome model under treatment A=0
-        gp_funcs["om_A1"] = sample_outcome_model_gp(X_range, U_range, gp_params["om_A1_par"], seed + 1)  # GP - outcome model under treatment A=1
-        gp_funcs["w_sel"] = sample_outcome_model_gp(X_range, U_range, gp_params["w_sel_par"], seed + 2)  # GP - selection score model P(S=1|X)
-        gp_funcs["w_trt"] = sample_outcome_model_gp(X_range, U_range, gp_params["w_trt_par"], seed + 3)  # GP - propensity score in OBS study P(A=1|X, S=2)
-
-        SyntheticData = SyntheticDataModule(big_n_rct, n_tar, n_obs, n_MC, gp_funcs, all_covs, X_range, U_range, pasx, seed + 4)
+        SyntheticData = SyntheticDataModule(big_n_rct, n_tar, n_obs, n_MC, gp_params, all_covs, X_range, U_range, pasx, seed + 3)
         df_comp_big, df_obs = SyntheticData.get_df() 
         true_gax, true_psx = SyntheticData.plot_om(save_dir=f"{save_dir}/case_{case_idx}")
         mu_a_gt, _, _, _ = SyntheticData.get_true_mean()
 
         if not fax_noise:
-            f_a_X = regression_model(df_obs.query("A == 1"), adj_covs, "Y", "NN", params["os-om"])
-            df_comp_big["fa(X)"] = f_a_X.predict(np.array(df_comp_big[adj_covs]).reshape(-1,len(adj_covs)))
+            pars = {"degree": params["os-om"]["poly_degrees"][0], "Cs": params["os-om"]["Cs"], "cv_folds": params["os-om"]["cv_folds"], "penalty": params["os-om"]["penalty"]}
+            f_a_X = regression_model(df_obs.query("A == 1"), adj_covs, "Y", "poly", pars)
+            X_arr = np.array(df_comp_big[adj_covs]).reshape(-1, len(adj_covs))
+            poly = PolynomialFeatures(degree=pars["degree"], include_bias=False)
+            pcol = [f"Xp{i+1}" for i in range(pars["degree"])]
+            df_comp_big[pcol] = poly.fit_transform(X_arr)
+            df_comp_big["fa(X)"] = f_a_X.predict(np.array(df_comp_big[pcol]))
         else:
             f_a_X = "noise"
             df_comp_big["fa(X)"] = 5 * np.random.randn(len(df_comp_big))
@@ -50,7 +48,7 @@ def sim_cases(case_idx, gp_params, params,
         return stat_bias_sq_est, stat_var_est, rmse
 
 def get_estimates(df_comp_big, tar_idx, rct_idx_list, f_a_X, true_gax, true_psx, case_idx, params, adj_covs, X_range, num_runs_per_case, save_dir):
-    nem = 8
+    nem = 4
     num_estimates = len(params["poly_degrees"]) * nem
     estimates = np.zeros((num_runs_per_case, num_estimates))
     preds = {}
@@ -66,20 +64,11 @@ def get_estimates(df_comp_big, tar_idx, rct_idx_list, f_a_X, true_gax, true_psx,
             h_a_X = regression_model(df_comp.query("S == 1 & A == 1"), adj_covs + ["fa(X)"], "Y", "poly", pars)
             b_a_X = regression_model(df_comp.query("S == 1 & A == 1"), adj_covs, "Z", "poly", pars)
 
-            p_S_X = logistic_model(df_comp.copy(), adj_covs, "S", "poly", pars)
-            p_A_SX = logistic_model(df_comp.query("S == 1"), adj_covs, "A", "poly", pars)
-
             X_arr = np.array(df_comp[adj_covs]).reshape(-1, len(adj_covs))
             poly = PolynomialFeatures(degree=pdeg, include_bias=False)
             pcol = [f"Xp{i+1}" for i in range(pdeg)]
             df_comp[pcol] = poly.fit_transform(X_arr)
-
-            df_comp.fillna(0, inplace=True)
-                    
-            df_comp["pA_SX"] = df_comp.apply(lambda r: p_A_SX.predict_proba(np.array(r[pcol]).reshape(-1, len(pcol)))[0][1], axis=1)
-            df_comp["pS_X"] = df_comp.apply(lambda r: p_S_X.predict_proba(np.array(r[pcol]).reshape(-1, len(pcol)))[0][1], axis=1)
-            df_comp["w(XSA)"] = df_comp.apply(lambda r: r["S"] * r["A"] * (1 - r["pS_X"]) / (r["pA_SX"] * r["pS_X"]), axis=1)
-            
+                                
             df_comp["ga(X)"] = g_a_X.predict(df_comp[pcol])
             df_comp["ba(X)"] = b_a_X.predict(df_comp[pcol])
             df_comp["ha(X)"] = h_a_X.predict(df_comp[pcol + ["fa(X)"]])
@@ -88,10 +77,6 @@ def get_estimates(df_comp_big, tar_idx, rct_idx_list, f_a_X, true_gax, true_psx,
             estimates[run_idx, nem * p_idx + 1] = bsl2_om(df_comp)
             estimates[run_idx, nem * p_idx + 2] = nm1_abc(df_comp)
             estimates[run_idx, nem * p_idx + 3] = nm2_aom(df_comp)
-            estimates[run_idx, nem * p_idx + 4] = bsl3_ipw(df_comp)
-            estimates[run_idx, nem * p_idx + 5] = bsl4_dr(df_comp)
-            estimates[run_idx, nem * p_idx + 6] = nm3_dr_abc(df_comp)
-            estimates[run_idx, nem * p_idx + 7] = nm4_dr_aom(df_comp)
 
             preds[f"gax_pd_{pdeg}"], preds[f"bax_pd_{pdeg}"], preds[f"hax_pd_{pdeg}"] =\
                   get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, adj_covs, "poly", pdeg, X_range)
@@ -111,10 +96,14 @@ def plot_case_oms(save_dir, X_range, df_comp, f_a_X, true_gax, true_psx, preds, 
     os.makedirs(save_dir, exist_ok=True)
 
     X_test = X_range.reshape(-1, 1)
+
+    poly = PolynomialFeatures(degree=pdeg, include_bias=False)
+    fX_test = poly.fit_transform(X_test)
+
     if f_a_X == None:
         fax_preds = 5 * np.random.randn(len(X_test))
     else:
-        fax_preds = f_a_X.predict(X_test)
+        fax_preds = f_a_X.predict(fX_test)
     true_bax = fax_preds - true_gax
 
     cp = ["red", "#34b6c6", "mediumpurple","#79ad41", "crimson", "navy", "black", "goldenrod"]
@@ -135,7 +124,7 @@ def plot_case_oms(save_dir, X_range, df_comp, f_a_X, true_gax, true_psx, preds, 
 
     ax2.set_xticks([])
     ax2.plot(X_test, true_gax, label=r'$g_1 (X)$', color=cp[6], linewidth=2)
-    ax2.plot(X_test, preds[f"gax_pd_{pdeg}"], label=r'$\hat{g}_1 (X)$', ls='--', color=cp[1], linewidth=2)
+    ax2.plot(X_test, preds[f"gax_pd_{pdeg}"], label=r'$\hat{g}_1 (X)$', ls='-.', color=cp[1], linewidth=2)
     ax2.plot(X_test, preds[f"hax_pd_{pdeg}"], label=r'$\hat{h}_1 (\tilde{X})$', ls='--', color=cp[2], linewidth=2)
     ax2.plot(X_test, fax_preds, label=r'$f_1 (X)$', color=cp[0], ls=':', linewidth=2)
     ax2.scatter(df_comp.query("S==1 & A==1")["X"],df_comp.query("S==1 & A==1")["Y"], s=3, color=cp[7], alpha=1, label=r"Trial patients ($Y$)")
@@ -204,8 +193,7 @@ def plot_case_rmse(save_dir, case_idx, estimates, mu_a_gt):
 def save_setting_stats(results, save_dir, poly_degrees):
 
     n = len(results)
-    base_methods = ["fax", "om-gax", "om-bax", "om-hax", "ipw", "dr-gax", "dr-bax", "dr-hax"]
-    #base_methods = ["fax", "om-gax", "om-bax", "om-hax"]
+    base_methods = ["fax", "om-gax", "om-bax", "om-hax"]
     methods = [*np.concatenate([[bm + "-PD-" + str(pd) for bm in base_methods] for pd in poly_degrees])]
 
     bias_sq_arr = np.vstack([tpl[0] for tpl in results])
