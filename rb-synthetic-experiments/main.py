@@ -23,7 +23,7 @@ adj_covs = ["X"]                # covariates used in learning the nuisance funct
 X_range = np.linspace(-1,1,51)  # range of the first covariate
 U_range = np.linspace(-1,1,51)  # range of the first covariate
 
-n_rct_list = [1000]
+n_rct_list = [200]
 n_tar = 2000                     # target sample size
 n_obs = 50000                     # observational sample size
 num_case_per_setting = 100         # num. different ground-truth cases to simulate for EACH GP param. setting
@@ -37,8 +37,8 @@ num_runs_per_case = 100           # num. runs for EACH ground-truth case. a new 
 
 om_A0_par_list = [{'ls':[1,1], 'alpha':[1,1], "kernel": "rbf"}]  # unused rn. 
 
-om_A1_par_list = [{'ls':[0.5,0.5], 'alpha':[5,5], "kernel": "rbf"},        # GP parameters for FOM_1
-                  {'ls':[0.2,0.5], 'alpha':[5,5], "kernel": "rbf"}]
+om_A1_par_list = [{"deg": 5, "xcoef": [0,1], "ucoef": [0,1], "kernel": "poly"},        # GP parameters for FOM_1
+                  {"deg": 5, "xcoef": [0,1], "ucoef": [0,1], "kernel": "poly"}, ]
 
 w_sel_par_list = [{'ls':[1,1e6], 'alpha':[10,0], "kernel": "rbf"}]         # Nested trial participation P(S=1 | X,U) GP parameters
 
