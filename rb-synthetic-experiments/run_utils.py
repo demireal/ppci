@@ -79,15 +79,15 @@ def get_estimates(df_comp_big, tar_idx, rct_idx_list, f_a_X, true_gax, true_psx,
             estimates[run_idx, nem * p_idx + 3] = nm2_aom(df_comp)
 
             preds[f"gax_pd_{pdeg}"], preds[f"bax_pd_{pdeg}"], preds[f"hax_pd_{pdeg}"] =\
-                  get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, adj_covs, "poly", pdeg, X_range)
+                  get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, adj_covs, "poly", pdeg, params["poly_degrees"][-1], X_range)
 
     for pdeg in params["poly_degrees"]:
-        plot_case_oms(f"{save_dir}/case_{case_idx}", X_range, df_comp, f_a_X, true_gax, true_psx, preds, pdeg)
+        plot_case_oms(f"{save_dir}/case_{case_idx}", X_range, df_comp, f_a_X, true_gax, true_psx, preds, pdeg, params["poly_degrees"][-1])
 
     return estimates
 
 
-def plot_case_oms(save_dir, X_range, df_comp, f_a_X, true_gax, true_psx, preds, pdeg):
+def plot_case_oms(save_dir, X_range, df_comp, f_a_X, true_gax, true_psx, preds, pdeg, os_pdeg):
 
     matplotlib.rcParams['pdf.fonttype'] = 42  # no type-3
     matplotlib.rcParams['ps.fonttype'] = 42
@@ -97,7 +97,7 @@ def plot_case_oms(save_dir, X_range, df_comp, f_a_X, true_gax, true_psx, preds, 
 
     X_test = X_range.reshape(-1, 1)
 
-    poly = PolynomialFeatures(degree=pdeg, include_bias=False)
+    poly = PolynomialFeatures(degree=os_pdeg, include_bias=False)
     fX_test = poly.fit_transform(X_test)
 
     if f_a_X == None:

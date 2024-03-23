@@ -86,9 +86,13 @@ def logistic_model(df, adj_covs, target, model, params):
     return model
 
 
-def get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, regressors, model, pdeg, X_test):
+def get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, regressors, model, pdeg, os_pdeg, X_test):
 
     if model == "poly":
+
+        os_poly = PolynomialFeatures(degree=os_pdeg, include_bias=False)
+        os_X_test = os_poly.fit_transform(X_test.reshape(-1,len(regressors)))
+
         poly = PolynomialFeatures(degree=pdeg, include_bias=False)
         X_test = poly.fit_transform(X_test.reshape(-1,len(regressors)))
 
@@ -96,7 +100,7 @@ def get_om_fits(g_a_X, b_a_X, h_a_X, f_a_X, regressors, model, pdeg, X_test):
             f_a_X_test = 5 * np.random.randn(len(X_test))
         else:
             #f_a_X_test = f_a_X.predict(X_test.reshape(-1, 1))
-            f_a_X_test = f_a_X.predict(X_test)
+            f_a_X_test = f_a_X.predict(os_X_test)
 
         X_test_aug = np.hstack((X_test.reshape(-1, pdeg), f_a_X_test.reshape(-1, 1)))
 
