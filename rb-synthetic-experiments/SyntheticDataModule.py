@@ -16,8 +16,8 @@ class SyntheticDataModule:
                 n_MC=10000,
                 gp_params=None,
                 covs=["X", "U"],
-                X_range=np.linspace(-1,1,51),
-                U_range=np.linspace(-1,1,51),
+                X_range=np.linspace(-1,1,26),
+                U_range=np.linspace(-1,1,26),
                 pasx={"lb":0.1, "ub":0.9, "trial":0.5},
                 seed=42,
                 ):
@@ -43,10 +43,15 @@ class SyntheticDataModule:
 
         self.poly_covs = [f"X{i}" for i in self.poX] + [f"U{i}" for i in self.poU] 
         self.poly_coef = np.concatenate((X_coef,U_coef))
+        self.poly_coef[-1] = 10
         self.poly_bias = np.random.uniform(-1,1)
 
         self.w_sel = sample_outcome_model_gp(X_range, U_range, gp_params["w_sel_par"], self.seed + 1)  # GP - selection score model P(S=1|X)
         self.w_trt = sample_outcome_model_gp(X_range, U_range, gp_params["w_trt_par"], self.seed + 2)  # GP - propensity score in OBS study P(A=1|X, S=2)
+
+        self.no_conf = False
+        if gp_params["w_trt_par"]["ls"][0] > 1:
+            self.no_conf = True
 
         self.XX, self.UU = np.meshgrid(self.X, self.U)
         self.XU_flat = np.c_[self.XX.ravel(), self.UU.ravel()]
@@ -108,8 +113,11 @@ class SyntheticDataModule:
         for order in self.poU:
             df[f'U{order}'] = df['U'].apply(lambda u: compute_legendre_polynomials(u, order))
 
-        df["P(A=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_trt(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
-        df["A"] = np.array(df["P(A=1|X)"] > np.random.uniform(size=self.n_obs), dtype=int) 
+        if self.no_conf:
+            df["A"] = np.array(0.9 > np.random.uniform(size=self.n_obs), dtype=int) 
+        else:
+            df["P(A=1|X)"] = df.apply(lambda row: np.clip(expit(self.w_trt(row["X"], row["U"])[0]), self.prop_clip_lb, self.prop_clip_ub), axis=1)
+            df["A"] = np.array(df["P(A=1|X)"] > np.random.uniform(size=self.n_obs), dtype=int) 
 
         df['Y0'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias
         df['Y1'] = np.array(df[self.poly_covs]) @ self.poly_coef + self.poly_bias

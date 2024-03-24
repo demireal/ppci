@@ -117,8 +117,8 @@ def plot_case_oms(save_dir, X_range, df_comp, f_a_X, true_gax, true_psx, preds, 
     ax1.spines['left'].set_visible(False)
     ax1.plot(X_test.reshape(-1), true_psx, color=cp[4], label='P(S=1 | X)')
     ax1.plot(X_test.reshape(-1), 1 - true_psx, color=cp[5], label='P(S=0 | X)')
-    ax1.fill_between(X_test.reshape(-1), true_psx, np.zeros(51), color=cp[4], alpha=0.2, label='P(S=1 | X)')
-    ax1.fill_between(X_test.reshape(-1), 1 - true_psx, np.zeros(51), color=cp[5], alpha=0.2, label='P(S=0 | X)')
+    ax1.fill_between(X_test.reshape(-1), true_psx, np.zeros(26), color=cp[4], alpha=0.2, label='P(S=1 | X)')
+    ax1.fill_between(X_test.reshape(-1), 1 - true_psx, np.zeros(26), color=cp[5], alpha=0.2, label='P(S=0 | X)')
     ax1.tick_params(axis='x', colors='dimgray')
     ax1.tick_params(axis='y', colors='dimgray')
 

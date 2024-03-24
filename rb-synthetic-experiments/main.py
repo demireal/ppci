@@ -17,16 +17,16 @@ from estimators import *
 '''
 
 d = 2                           # 2-dim. covariate vector
-n_MC = 5000                    # num. Monte Carlo samples to calculate ground truth mean in the target population
+n_MC = 10000                    # num. Monte Carlo samples to calculate ground truth mean in the target population
 all_covs = ["X", "U"]           # all covariates used in the data generating process
 adj_covs = ["X"]                # covariates used in learning the nuisance functions such as the outcome models and weights.
-X_range = np.linspace(-1,1,51)  # range of the first covariate
-U_range = np.linspace(-1,1,51)  # range of the first covariate
+X_range = np.linspace(-1,1,26)  # range of the first covariate
+U_range = np.linspace(-1,1,26)  # range of the first covariate
 
 n_rct_list = [200]
-n_tar = 5000                     # target sample size
-n_obs = 2000                     # observational sample size
-num_case_per_setting = 100         # num. different ground-truth cases to simulate for EACH GP param. setting
+n_tar = 10000                     # target sample size
+n_obs = 10000                     # observational sample size
+num_case_per_setting = 30         # num. different ground-truth cases to simulate for EACH GP param. setting
 num_runs_per_case = 100           # num. runs for EACH ground-truth case. a new trial sample is drawn every time.
 
 # n_rct_list = [200]
@@ -35,16 +35,16 @@ num_runs_per_case = 100           # num. runs for EACH ground-truth case. a new 
 # num_case_per_setting = 2       # num. different ground-truth cases to simulate for EACH GP param. setting
 # num_runs_per_case = 10         # num. runs for EACH ground-truth case. a new trial sample is drawn every time.
 
-xpoly_deg = 10
+xpoly_deg = 5
 
-om_A0_par_list = [{"xdeg": xpoly_deg, "udeg": 2, "xcoef": [-1,1], "ucoef": [1,2], "kernel": "poly"}]
+om_A0_par_list = [{"xdeg": xpoly_deg, "udeg": 1, "xcoef": [-3,3], "ucoef": [0,2], "kernel": "poly"}]
 
-om_A1_par_list = [{"xdeg": xpoly_deg, "udeg": 2, "xcoef": [-1,1], "ucoef": [1,2], "kernel": "poly"}]
+om_A1_par_list = [{"xdeg": xpoly_deg, "udeg": 1, "xcoef": [-3,3], "ucoef": [0,2], "kernel": "poly"}]
 
-w_sel_par_list = [{'ls':[1,1e6], 'alpha':[10,0], "kernel": "rbf"}]         # Nested trial participation P(S=1 | X,U) GP parameters
+w_sel_par_list = [{'ls':[1,1e6], 'alpha':[10,0], "kernel": "rbf", "var": 5}]         # Nested trial participation P(S=1 | X,U) GP parameters
 
-w_trt_par_list = [{'ls':[1e6,0.5], 'alpha':[0,0], "kernel": "rbf"},
-                  {'ls':[1e6,0.5], 'alpha':[0,10], "kernel": "rbf"}]
+w_trt_par_list = [{'ls':[0.25,1], 'alpha':[0,20], "kernel": "rbf", "var": 500},
+                  {'ls':[1e6,1e6], 'alpha':[0,0], "kernel": "rbf", "var": 500}]
 
 # om_A1_par_list = [{'ls':[0.2,0.5], 'alpha':[5,5], "kernel": "rbf"}]
 # w_sel_par_list = [{'ls':[1,1e6], 'alpha':[10,0], "kernel": "rbf"}]         # Nested trial participation P(S=1 | X,U) GP parameters
